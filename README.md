@@ -1,7 +1,3 @@
-# CompilerFromScratch
- hand-built compiler project featuring custom grammar design, lexical/syntax analysis with Coco/R, and a full test suite.
-
-
 # Compiler for a Custom Programming Language
 
 A compiler developed in **C#** using **Coco/R** for a custom-designed programming language. The compiler performs lexical, syntactic, and semantic analysis, generates symbol tables and syntax trees, and executes intermediate code.
