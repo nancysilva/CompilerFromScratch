@@ -42,7 +42,8 @@ This project was developed as part of the **Compiler Design** course at **Tecnol
 ---
 
 ## Compiler Pipeline
-```
+
+```text
 Source Code
       │
       ▼
@@ -71,26 +72,44 @@ Execution
 
 ## Project Structure
 
-```
-CompiladorCocoR/
+```text
+MiniLang-Compiler/
 │
-├── Scanner.cs
-├── Parser.cs
+├── Compiler/
+│   ├── GeneradorCuadruplos.cs
+│   ├── ManejadorErrores.cs
+│   ├── NodoArbol.cs
+│   ├── Parser.cs
+│   ├── Scanner.cs
+│   └── TablaSimbolos.cs
+│
+├── Grammar/
+│   ├── MiLenguaje.atg
+│   ├── Parser.frame
+│   └── Scanner.frame
+│
+├── testeo/
+│   ├── pruebaArreglo.txt
+│   ├── pruebaErrores.txt
+│   ├── pruebaFor.txt
+│   ├── pruebaFunction.txt
+│   ├── pruebaFuncion2.txt
+│   ├── pruebaIf.txt
+│   └── pruebaWhile.txt
+│
 ├── Program.cs
-├── Errors.cs
-├── SymbolTable.cs
-├── CodeGenerator.cs
-├── Grammar.atg
-└── TestPrograms/
+├── CompiladorCocoR.csproj
+├── README.md
+└── .gitignore
 ```
 
-*(The exact structure may vary depending on your implementation.)*
+> **Note:** The project uses **Coco/R** to generate the lexical scanner and syntactic parser from the `MiLenguaje.atg` grammar specification. The generated executable (`Coco.exe`) is not included in this repository.
 
 ---
 
 ## Build
 
-Requires the [.NET SDK](https://dotnet.microsoft.com/download) installed.
+This project requires the **.NET SDK** installed.
 
 ```bash
 dotnet build
@@ -103,28 +122,31 @@ dotnet build
 Compile a source file:
 
 ```bash
-dotnet CompiladorCocoR.dll program.txt
+dotnet run -- pruebaIf.txt
 ```
 
 Display only the generated tokens:
 
 ```bash
-dotnet CompiladorCocoR.dll --tokens program.txt
+dotnet run -- --tokens pruebaIf.txt
 ```
 
 ---
 
-## Example
+## Example Program
 
 ```text
 int a = 10;
 int b = 20;
+
 function sum(x, y){
     return x + y;
 }
+
 if (a < b){
     print(sum(a,b));
 }
+
 for(i = 0; i < 5; i++){
     print(i);
 }
@@ -132,7 +154,7 @@ for(i = 0; i < 5; i++){
 
 ---
 
-## Output
+## Compiler Output
 
 The compiler is capable of producing:
 
@@ -152,12 +174,12 @@ The compiler is capable of producing:
 Through this project we implemented the fundamental phases of compiler construction, including:
 
 - Lexical analysis
-- Parsing
-- Semantic checking
+- Syntax analysis
+- Semantic analysis
 - Symbol table management
 - Syntax tree construction
 - Intermediate code generation
-- Error handling and reporting
+- Error detection and reporting
 
 ---
 
@@ -166,7 +188,7 @@ Through this project we implemented the fundamental phases of compiler construct
 - **Nancy Silva Alvarez**
 - **Carolina de los Santos**
 
-Developed for the Compiler Design course at **Tecnológico de Monterrey**.
+Developed for the **Compiler Design** course at **Tecnológico de Monterrey**.
 
 ---
 
