@@ -1,0 +1,692 @@
+/*==========================================================================
+   MiLenguaje.atg — Gramática Coco/R para el compilador u
+===========================================================================*/
+
+COMPILER MiLenguaje
+
+class ListaCadenas : System.Collections.Generic.List<string> {}
+
+class IdDeclarado
+{
+    public string Nombre { get; set; }
+    public bool EsArreglo { get; set; }
+    public int Tam { get; set; }
+
+    public IdDeclarado(string nombre, bool esArreglo, int tam)
+    {
+        Nombre = nombre;
+        EsArreglo = esArreglo;
+        Tam = tam;
+    }
+}
+
+class ListaIdsDeclarados : System.Collections.Generic.List<IdDeclarado> {}
+
+private TablaSimbolos tablaSimbolos = new TablaSimbolos();
+public GeneradorCuadruplos generador  = new GeneradorCuadruplos();
+public ManejadorErrores errores       = new ManejadorErrores();
+public NodoArbol arbolSintactico = new NodoArbol("Programa");
+
+private NodoArbol nodoVariables = new NodoArbol("Variables");
+private NodoArbol nodoSentencias = new NodoArbol("Sentencias");
+
+public void ImprimirTablaSimbolos()
+
+{
+
+    tablaSimbolos.Imprimir();
+
+}
+
+public void ImprimirArbolSintactico()
+
+{
+
+    arbolSintactico.Imprimir();
+
+}
+
+private int contTemp = 0;
+private string NuevoTemp() => $"t{++contTemp}";
+
+private string scopeActual = "global";
+
+/*==========================================================================
+   CHARACTERS
+===========================================================================*/
+CHARACTERS
+  letra     = 'a'..'z' + 'A'..'Z' + '_'.
+  digito    = '0'..'9'.
+  cualquier = ANY - '"' - '\\' - '\r' - '\n'.
+  cr        = '\r'.
+  lf        = '\n'.
+  tab       = '\t'.
+
+/*==========================================================================
+   TOKENS
+===========================================================================*/
+TOKENS
+
+  lbrace     = "{".
+  rbrace     = "}".
+  lparen     = "(".
+  rparen     = ")".
+  lbracket   = "[".
+  rbracket   = "]".
+  semicolon  = ";".
+  comma      = ",".
+  colon      = ":".
+
+  assign     = ":=".
+  plus       = "+".
+  minus      = "-".
+  times      = "*".
+  slash      = "/".
+  percent    = "%".
+
+  eq         = "==".
+  neq        = "!=".
+  le         = "<=".
+  ge         = ">=".
+  lt         = "<".
+  gt         = ">".
+
+  andOp      = "&&".
+  orOp       = "||".
+  notOp      = "!".
+  inc        = "++".
+  dec        = "--".
+
+  flotante   = digito { digito } "." digito { digito }.
+  entero     = digito { digito }.
+  cadena     = '"' { cualquier } '"'.
+  ident      = letra { letra | digito }.
+
+/*==========================================================================
+   COMMENTS / IGNORE
+===========================================================================*/
+COMMENTS FROM "//" TO lf
+COMMENTS FROM "/*" TO "*/" NESTED
+
+IGNORE cr + lf + tab + ' '
+
+/*==========================================================================
+   PRODUCTIONS
+===========================================================================*/
+PRODUCTIONS
+
+MiLenguaje
+=
+(.
+
+  arbolSintactico.Agregar(nodoVariables);
+
+  arbolSintactico.Agregar(nodoSentencias);
+
+.)
+  "program" "main" lbrace
+    SeccionVar
+    DeclFunciones
+    BloquePrincipal
+  rbrace
+.
+
+DeclFunciones
+=
+  { DeclaracionFuncion }
+.
+
+DeclaracionFuncion     (. string nomFunc = ""; string tipoRetorno = "void"; int numParams = 0; .)
+=
+  "function" ident      (. nomFunc = t.val; .)
+  lparen
+  ListaParametros<nomFunc, out numParams>
+  rparen
+  [ colon Tipo<out tipoRetorno> ]
+                         (.
+                           scopeActual = nomFunc;
+
+                           if (!tablaSimbolos.AgregarFuncion(nomFunc, tipoRetorno, numParams, la.line))
+                               errores.Error(la.line, $"Función '{nomFunc}' ya declarada.");
+
+                           generador.RegistrarInicioFuncion(nomFunc);
+                         .)
+  lbrace
+  SeccionVar
+  BloquePrincipal
+                        (.
+
+                           generador.Agregar("RETURN", "-", "-", "-");
+
+                        .)
+  rbrace                (. scopeActual = "global"; .)
+.
+
+ListaParametros<string func, out int numParams>(. numParams = 0; .)
+=
+  [
+    Parametro<func>      (. numParams++; .)
+    {
+      comma
+      Parametro<func>    (. numParams++; .)
+
+    }
+  ]
+.
+
+Parametro<string func>  (. string nom = ""; string tipo = ""; .)
+=
+  ident                 (. nom = t.val; .)
+  colon
+  Tipo<out tipo>        (. tablaSimbolos.AgregarVariable(nom, tipo, func, la.line); .)
+.
+
+SeccionVar
+=
+  [ "var" ListaDeclaraciones ]
+.
+
+ListaDeclaraciones
+=
+  Declaracion { Declaracion }
+.
+
+Declaracion             (. ListaIdsDeclarados ids = new ListaIdsDeclarados();
+                           string tipo = ""; .)
+=
+  ListaIds<ids>
+  colon Tipo<out tipo> semicolon
+                         (.
+                           foreach (var id in ids)
+                           {
+                             bool ok = id.EsArreglo
+                               ? tablaSimbolos.AgregarArreglo(id.Nombre, tipo, id.Tam, scopeActual, la.line)
+                               : tablaSimbolos.AgregarVariable(id.Nombre, tipo, scopeActual, la.line);
+
+                             if (!ok)
+                             {
+                               errores.Error(la.line, $"Variable '{id.Nombre}' ya declarada en este scope.");
+                             }
+                             else if (scopeActual == "global")
+                             {
+                               string textoVar = id.EsArreglo
+                                 ? $"{id.Nombre}[{id.Tam}] : {tipo}"
+                                 : $"{id.Nombre} : {tipo}";
+
+                               nodoVariables.Agregar(new NodoArbol(textoVar));
+                             }
+                           }
+                         .)
+.
+
+ListaIds<ListaIdsDeclarados ids>
+=
+  IdConDimension<ids>
+  { comma IdConDimension<ids> }
+.
+
+IdConDimension<ListaIdsDeclarados ids>
+                         (. string nombre = ""; int tam = 0; bool esArr = false; .)
+=
+  ident                  (. nombre = t.val; .)
+  [
+    lbracket entero      (. tam = int.Parse(t.val); esArr = true; .)
+    rbracket
+  ]
+                         (.
+                           ids.Add(new IdDeclarado(nombre, esArr, tam));
+                         .)
+.
+
+Tipo<out string tipo>   (. tipo = ""; .)
+=
+  ( "int"               (. tipo = "int";   .)
+  | "float"             (. tipo = "float"; .)
+  | "char"              (. tipo = "char";  .)
+  | "bool"              (. tipo = "bool";  .)
+  )
+.
+
+BloquePrincipal
+=
+  "begin" semicolon
+  ListaSentencias
+  "end" semicolon
+.
+
+ListaSentencias
+=
+  { Sentencia }
+.
+
+Sentencia
+=
+  ( SentenciaIdent
+  | SentenciaIf
+  | SentenciaWhile
+  | SentenciaFor
+  | SentenciaWrite
+  | SentenciaInput
+  | SentenciaReturn
+  )
+.
+
+SentenciaIdent          (. string nombre = ""; string tipoExpr = "";
+                           string res = ""; string idx = "";
+                           string op = "";
+                           var info = (EntradaSimbolo)null; .)
+=
+  ident                 (. nombre = t.val; .)
+  (
+    lparen
+    rparen
+                         (.
+                           if (!tablaSimbolos.ExisteFuncion(nombre))
+                             errores.Error(la.line, $"Función '{nombre}' no declarada.");
+
+                           generador.Agregar("CALL", nombre, "-", "-");
+                           nodoSentencias.Agregar(new NodoArbol("LlamadaFuncion"));
+                         .)
+    semicolon
+
+  |
+    [ lbracket Expresion<out idx, out tipoExpr> rbracket ]
+    assign
+    Expresion<out res, out tipoExpr>
+                         (.
+                           info = tablaSimbolos.Buscar(nombre, scopeActual);
+
+                           if (info == null)
+                             errores.Error(la.line, $"Variable '{nombre}' no declarada.");
+                           else if (info.Tipo != tipoExpr && tipoExpr != "int" && tipoExpr != "float")
+                             errores.Error(la.line, $"Tipo incompatible: '{tipoExpr}' asignado a '{info.Tipo}'.");
+
+                           string destino = string.IsNullOrEmpty(idx) ? nombre : $"{nombre}[{idx}]";
+                           generador.Agregar(":=", res, "-", destino);
+
+                           nodoSentencias.Agregar(new NodoArbol("Asignacion"));
+
+                           if (info != null)
+                             tablaSimbolos.SetValor(nombre, scopeActual, res);
+                         .)
+    semicolon
+
+  |
+    ( inc               (. op = "+"; .)
+    | dec               (. op = "-"; .)
+    )
+                         (.
+                           info = tablaSimbolos.Buscar(nombre, scopeActual);
+
+                           if (info == null)
+                             errores.Error(la.line, $"Variable '{nombre}' no declarada.");
+
+                           string tmp = NuevoTemp();
+                           generador.Agregar(op, nombre, "1", tmp);
+                           generador.Agregar(":=", tmp, "-", nombre);
+
+                           string operadorTexto = op == "+" ? "++" : "--";
+                          nodoSentencias.Agregar(new NodoArbol("IncrementoDecremento"));
+                         .)
+    semicolon
+  )
+.
+
+SentenciaIf             (. string cond = ""; string tipoCond = "";
+                           string etFalse = ""; string etFin = ""; .)
+=
+  "if" lparen Expresion<out cond, out tipoCond> rparen
+                         (.
+                           if (tipoCond != "bool")
+                             errores.Error(la.line,
+                               "La condición del IF debe ser booleana (resultado de comparación o lógica).");
+
+                           etFalse = generador.NuevaEtiqueta();
+                           etFin   = generador.NuevaEtiqueta();
+                           generador.Agregar("GOTOF", cond, "-", etFalse);
+
+                           nodoSentencias.Agregar(new NodoArbol("If"));
+                         .)
+  "then" lbrace ListaSentencias rbrace
+                         (.
+                           generador.Agregar("GOTO", "-", "-", etFin);
+                           generador.AgregarEtiqueta(etFalse);
+                         .)
+  [
+    "else" lbrace ListaSentencias rbrace
+  ]
+                         (.
+                           generador.AgregarEtiqueta(etFin);
+                         .)
+.
+
+SentenciaWhile          (. string cond = ""; string tipoCond = "";
+                           string etIni = ""; string etFin = ""; .)
+=
+                         (.
+                           etIni = generador.NuevaEtiqueta();
+                           generador.AgregarEtiqueta(etIni);
+                         .)
+  "while" lparen Expresion<out cond, out tipoCond> rparen
+                         (.
+                           if (tipoCond != "bool")
+                             errores.Error(la.line, "La condición del WHILE debe ser booleana.");
+
+                           etFin = generador.NuevaEtiqueta();
+                           generador.Agregar("GOTOF", cond, "-", etFin);
+                           
+                           nodoSentencias.Agregar(new NodoArbol("While"));
+                         .)
+  "do" lbrace ListaSentencias rbrace
+                         (.
+                           generador.Agregar("GOTO", "-", "-", etIni);
+                           generador.AgregarEtiqueta(etFin);
+                         .)
+.
+
+SentenciaFor            (. string nomVar = ""; string init = ""; string tipoInit = "";
+                           string cond = ""; string tipoCond = "";
+                           string etIni = ""; string etFin = ""; string opInc = "+"; .)
+=
+  "for" lparen
+    ident               (. nomVar = t.val;
+                           var info = tablaSimbolos.Buscar(nomVar, scopeActual);
+                           if (info == null)
+                             errores.Error(la.line, $"Variable '{nomVar}' no declarada."); .)
+    assign
+    Expresion<out init, out tipoInit>
+                         (.
+                           generador.Agregar(":=", init, "-", nomVar);
+                           etIni = generador.NuevaEtiqueta();
+                           generador.AgregarEtiqueta(etIni);
+                         .)
+    semicolon
+    Expresion<out cond, out tipoCond>
+                         (.
+                           if (tipoCond != "bool")
+                             errores.Error(la.line, "La condición del FOR debe ser booleana.");
+
+                           etFin = generador.NuevaEtiqueta();
+                           generador.Agregar("GOTOF", cond, "-", etFin);
+
+                           nodoSentencias.Agregar(new NodoArbol("For"));
+                         .)
+    semicolon
+    ident               (. string varInc = t.val; .)
+    ( inc               (. opInc = "+"; .)
+    | dec               (. opInc = "-"; .)
+    )
+  rparen lbrace ListaSentencias rbrace
+                         (.
+                           string tmp = NuevoTemp();
+                           generador.Agregar(opInc, nomVar, "1", tmp);
+                           generador.Agregar(":=", tmp, "-", nomVar);
+                           generador.Agregar("GOTO", "-", "-", etIni);
+                           generador.AgregarEtiqueta(etFin);
+                         .)
+.
+
+SentenciaWrite          (. string val = ""; string tipo = ""; .)
+=
+  "write" lparen
+  Expresion<out val, out tipo>
+                         (. generador.Agregar("WRITE", val, "-", "-"); 
+                          nodoSentencias.Agregar(new NodoArbol("Write"));
+                         .)
+  rparen semicolon
+.
+
+SentenciaInput          (. string nomVar = ""; .)
+=
+  "input" lparen
+  ident                 (. nomVar = t.val;
+                           if (tablaSimbolos.Buscar(nomVar, scopeActual) == null)
+                             errores.Error(la.line, $"Variable '{nomVar}' no declarada."); .)
+  rparen semicolon
+                         (. generador.Agregar("INPUT", "-", "-", nomVar); 
+                          nodoSentencias.Agregar(new NodoArbol("Input"));
+                         .)
+.
+
+SentenciaReturn         (. string val = ""; string tipo = ""; .)
+=
+  "return" Expresion<out val, out tipo> semicolon
+                         (.
+                           var infoFunc = tablaSimbolos.BuscarFuncion(scopeActual);
+
+                           if (scopeActual == "global")
+                           {
+                               errores.Error(la.line, "La sentencia return solo puede usarse dentro de una función.");
+                           }
+                           else if (infoFunc != null)
+                           {
+                               if (infoFunc.TipoRetorno == "void")
+                               {
+                                   errores.Error(la.line, $"La función '{scopeActual}' no debe retornar un valor porque es void.");
+                               }
+                               else if (infoFunc.TipoRetorno != tipo)
+                               {
+                                   errores.Error(la.line, $"Tipo de retorno incompatible: se esperaba '{infoFunc.TipoRetorno}' y se obtuvo '{tipo}'.");
+                               }
+                           }
+
+                           generador.Agregar("RETURN", val, "-", "-");
+                           nodoSentencias.Agregar(new NodoArbol("Return"));
+                         .)
+.
+
+/*==========================================================================
+   EXPRESIONES
+===========================================================================*/
+
+Expresion<out string res, out string tipo>
+                         (. string r2 = ""; string t2 = ""; res = ""; tipo = ""; .)
+=
+  ExpresionAND<out res, out tipo>
+  {
+    ( orOp | "or" )
+    ExpresionAND<out r2, out t2>
+                         (.
+                           if (tipo != "bool" || t2 != "bool")
+                             errores.Error(la.line, "La operación OR requiere expresiones booleanas.");
+
+                           string tmp = NuevoTemp();
+                           generador.Agregar("||", res, r2, tmp);
+                           res = tmp;
+                           tipo = "bool";
+                         .)
+  }
+.
+
+ExpresionAND<out string res, out string tipo>
+                         (. string r2 = ""; string t2 = ""; res = ""; tipo = ""; .)
+=
+  ExpresionIgualdad<out res, out tipo>
+  {
+    ( andOp | "and" )
+    ExpresionIgualdad<out r2, out t2>
+                         (.
+                           if (tipo != "bool" || t2 != "bool")
+                             errores.Error(la.line, "La operación AND requiere expresiones booleanas.");
+
+                           string tmp = NuevoTemp();
+                           generador.Agregar("&&", res, r2, tmp);
+                           res = tmp;
+                           tipo = "bool";
+                         .)
+  }
+.
+
+ExpresionIgualdad<out string res, out string tipo>
+                         (. string r2 = ""; string t2 = ""; string op = ""; res = ""; tipo = ""; .)
+=
+  ExpresionRelacional<out res, out tipo>
+  {
+    ( eq                (. op = "=="; .)
+    | neq               (. op = "!="; .)
+    )
+    ExpresionRelacional<out r2, out t2>
+                         (.
+                           string tmp = NuevoTemp();
+                           generador.Agregar(op, res, r2, tmp);
+                           res = tmp;
+                           tipo = "bool";
+                         .)
+  }
+.
+
+ExpresionRelacional<out string res, out string tipo>
+                         (. string r2 = ""; string t2 = ""; string op = ""; res = ""; tipo = ""; .)
+=
+  ExpresionAditiva<out res, out tipo>
+  {
+    ( lt                (. op = "<";  .)
+    | gt                (. op = ">";  .)
+    | le                (. op = "<="; .)
+    | ge                (. op = ">="; .)
+    )
+    ExpresionAditiva<out r2, out t2>
+                         (.
+                           string tmp = NuevoTemp();
+                           generador.Agregar(op, res, r2, tmp);
+                           res = tmp;
+                           tipo = "bool";
+                         .)
+  }
+.
+
+ExpresionAditiva<out string res, out string tipo>
+                         (. string r2 = ""; string t2 = ""; string op = ""; res = ""; tipo = ""; .)
+=
+  ExpresionMultiplicativa<out res, out tipo>
+  {
+    ( plus              (. op = "+"; .)
+    | minus             (. op = "-"; .)
+    )
+    ExpresionMultiplicativa<out r2, out t2>
+                         (.
+                           string tmp = NuevoTemp();
+                           generador.Agregar(op, res, r2, tmp);
+                           res = tmp;
+                           tipo = (tipo == "float" || t2 == "float") ? "float" : "int";
+                         .)
+  }
+.
+
+ExpresionMultiplicativa<out string res, out string tipo>
+                         (. string r2 = ""; string t2 = ""; string op = ""; res = ""; tipo = ""; .)
+=
+  ExpresionUnaria<out res, out tipo>
+  {
+    ( times             (. op = "*"; .)
+    | slash             (. op = "/"; .)
+    | percent           (. op = "%"; .)
+    )
+    ExpresionUnaria<out r2, out t2>
+                         (.
+                           string tmp = NuevoTemp();
+                           generador.Agregar(op, res, r2, tmp);
+                           res = tmp;
+                           tipo = (tipo == "float" || t2 == "float") ? "float" : "int";
+                         .)
+  }
+.
+
+ExpresionUnaria<out string res, out string tipo>
+                         (. res = ""; tipo = ""; .)
+=
+  ( notOp
+    ExpresionUnaria<out res, out tipo>
+                         (.
+                           if (tipo != "bool")
+                             errores.Error(la.line, "El operador '!' requiere expresión booleana.");
+
+                           string tmp = NuevoTemp();
+                           generador.Agregar("!", res, "-", tmp);
+                           res = tmp;
+                           tipo = "bool";
+                         .)
+  | minus
+    ExpresionUnaria<out res, out tipo>
+                         (.
+                           string tmp = NuevoTemp();
+                           generador.Agregar("NEG", res, "-", tmp);
+                           res = tmp;
+                         .)
+  | Atomo<out res, out tipo>
+  )
+.
+
+Atomo<out string res, out string tipo>
+                         (. res = ""; tipo = "";
+                            string idx = ""; string tIdx = "";
+                            ListaCadenas args = new ListaCadenas();
+                            ListaCadenas tiposArgs = new ListaCadenas(); .)
+=
+  ( entero              (. res = t.val; tipo = "int"; .)
+  | flotante            (. res = t.val; tipo = "float"; .)
+  | "true"              (. res = "true"; tipo = "bool"; .)
+  | "false"             (. res = "false"; tipo = "bool"; .)
+  | cadena              (. res = t.val; tipo = "char"; .)
+
+  | ident               (.
+                           string nom = t.val;
+                           var info = tablaSimbolos.Buscar(nom, scopeActual);
+                         .)
+    (
+      lparen
+      ArgumentosFuncion<args, tiposArgs>
+      rparen             (.
+                           var infoFunc = tablaSimbolos.BuscarFuncion(nom);
+
+                           if (infoFunc == null)
+                             errores.Error(la.line, $"Función '{nom}' no declarada.");
+
+                           string tmp = NuevoTemp();
+
+                           foreach (var a in args)
+                             generador.Agregar("PARAM", a, "-", "-");
+
+                           generador.Agregar("CALL", nom, args.Count.ToString(), tmp);
+
+                           res = tmp;
+                           tipo = infoFunc?.TipoRetorno ?? "int";
+                         .)
+
+    | lbracket Expresion<out idx, out tIdx> rbracket
+                         (.
+                           if (info == null)
+                             errores.Error(la.line, $"Arreglo '{nom}' no declarado.");
+
+                           res = $"{nom}[{idx}]";
+                           tipo = info?.Tipo ?? "int";
+                         .)
+
+    |                    (.
+                           if (info == null)
+                             errores.Error(la.line, $"Variable '{nom}' no declarada.");
+
+                           res = nom;
+                           tipo = info?.Tipo ?? "int";
+                         .)
+    )
+
+  | lparen Expresion<out res, out tipo> rparen
+  )
+.
+
+ArgumentosFuncion<ListaCadenas args, ListaCadenas tipos>
+                         (. string r = ""; string t = ""; .)
+=
+  [
+    Expresion<out r, out t>
+                         (. args.Add(r); tipos.Add(t); .)
+    {
+      comma
+      Expresion<out r, out t>
+                         (. args.Add(r); tipos.Add(t); .)
+    }
+  ]
+.
+
+END MiLenguaje.

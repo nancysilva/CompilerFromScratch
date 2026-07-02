@@ -1,0 +1,34 @@
+program main{
+    var x : int;
+
+    function inicializar(){
+    begin;
+        x := 5;
+    end;
+    }
+
+    function duplicar(){
+    begin;
+        x := x * 2;
+    end;
+    }
+
+    function incrementar(){
+    begin;
+        x++;
+    end;
+    }
+
+    begin;
+        write("prueba varias funciones");
+
+        inicializar();
+        write(x);
+
+        duplicar();
+        write(x);
+
+        incrementar();
+        write(x);
+    end;
+}

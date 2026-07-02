@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>CompiladorCocoR</RootNamespace>
+    <AssemblyName>CompiladorCocoR</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <LangVersion>12</LangVersion>
+  </PropertyGroup>
+
+  <!-- Todos los .cs del proyecto se incluyen automáticamente -->
+
+</Project>
