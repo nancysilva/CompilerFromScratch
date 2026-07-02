@@ -1,8 +1,8 @@
-# Compiler for a Custom Programming Language
+# MiniLang Compiler — Compiler for a Custom Programming Language
 
-A compiler developed in **C#** using **Coco/R** for a custom-designed programming language. The compiler performs lexical, syntactic, and semantic analysis, generates symbol tables and syntax trees, and executes intermediate code.
+A compiler developed in **C#** using **Coco/R** for **MiniLang**, a custom-designed programming language. The compiler performs lexical, syntactic, and semantic analysis, generates symbol tables and syntax trees, and executes intermediate code.
 
-This project was developed as part of a **Compiler Design** course, where the programming language, grammar, and compiler were designed and implemented from scratch.
+This project was developed as part of the **Compiler Design** course at **Tecnológico de Monterrey**, where the programming language, grammar, and compiler were designed and implemented from scratch.
 
 ---
 
@@ -42,7 +42,6 @@ This project was developed as part of a **Compiler Design** course, where the pr
 ---
 
 ## Compiler Pipeline
-
 ```
 Source Code
       │
@@ -89,18 +88,28 @@ CompiladorCocoR/
 
 ---
 
+## Build
+
+Requires the [.NET SDK](https://dotnet.microsoft.com/download) installed.
+
+```bash
+dotnet build
+```
+
+---
+
 ## Usage
 
 Compile a source file:
 
 ```bash
-CompiladorCocoR.exe program.txt
+dotnet CompiladorCocoR.dll program.txt
 ```
 
 Display only the generated tokens:
 
 ```bash
-CompiladorCocoR.exe --tokens program.txt
+dotnet CompiladorCocoR.dll --tokens program.txt
 ```
 
 ---
@@ -110,15 +119,12 @@ CompiladorCocoR.exe --tokens program.txt
 ```text
 int a = 10;
 int b = 20;
-
 function sum(x, y){
     return x + y;
 }
-
 if (a < b){
     print(sum(a,b));
 }
-
 for(i = 0; i < 5; i++){
     print(i);
 }
@@ -157,8 +163,10 @@ Through this project we implemented the fundamental phases of compiler construct
 
 ## Authors
 
-- **Nancy Silva Álvarez**
+- **Nancy Silva Alvarez**
 - **Carolina de los Santos**
+
+Developed for the Compiler Design course at **Tecnológico de Monterrey**.
 
 ---
 
